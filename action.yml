@@ -24,6 +24,11 @@ inputs:
 runs:
   using: "composite"
   steps:
+    - run: |
+        echo "files: ${{ inputs.files }}"
+        echo "expressions: ${{ inputs.expressions }}"
+        echo "file-expressions: ${{ inputs.file-expressions }}"
+      shell: bash
     - name: Run entrypoint.sh
       id: entrypoint
       run: |
