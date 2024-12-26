@@ -34,9 +34,15 @@ runs:
     - name: Run entrypoint.sh
       id: entrypoint
       run: |
+        # normalize the inputs to a comma-separated list
+        files=$(echo "${{ inputs.files }}" | tr '\n' ',' | sed 's/,$//')
+        expressions=$(echo "${{ inputs.expressions }}" | tr '\n' ',' | sed 's/,$//')
+        file_expressions=$(echo "${{ inputs.file-expressions }}" | tr '\n' ',' | sed 's/,$//')
+
+        # run the entrypoint script
         chmod +x $GITHUB_ACTION_PATH/entrypoint.sh
         $GITHUB_ACTION_PATH/entrypoint.sh \
-          --files "${{ inputs.files }}" \
-          --expressions "${{ inputs.expressions }}" \
-          --file-expressions "${{ inputs.file-expressions }}"
+          --files "$files" \
+          --expressions "$expressions" \
+          --file-expressions "$file_expressions"
       shell: bash

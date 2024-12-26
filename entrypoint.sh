@@ -106,7 +106,7 @@ process_file() {
 
   for expression in "${expr_array[@]}"; do
     log_info "processing file: $file with expression: $expression"
-    if ! yq -e "$expression" -i "$file"; then
+    if ! yq eval "$expression" -i "$file"; then
       log_fatal "failed to process file: $file with expression: $expression"
     fi
   done
