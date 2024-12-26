@@ -46,8 +46,13 @@ check_yq_version() {
 normalize_input() {
     local input="$1"
     local output_array_name="$2"
-    local IFS=$'\n'
 
+    if [[ -z "$input" ]]; then
+        eval "$output_array_name=()"
+        return
+    fi
+
+    local IFS=$'\n'
     local normalized_input
     normalized_input=$(echo "$input" | tr '\n' ',')
 
