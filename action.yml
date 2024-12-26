@@ -39,6 +39,11 @@ runs:
         expressions=$(echo "${{ inputs.expressions }}" | tr '\n' ',' | sed 's/,$//')
         file_expressions=$(echo "${{ inputs.file-expressions }}" | tr '\n' ',' | sed 's/,$//')
 
+        # debug
+        echo "files: $files"
+        echo "expressions: $expressions"
+        echo "file_expressions: $file_expressions"
+
         # run the entrypoint script
         chmod +x $GITHUB_ACTION_PATH/entrypoint.sh
         $GITHUB_ACTION_PATH/entrypoint.sh \
