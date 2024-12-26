@@ -38,8 +38,8 @@ jobs:
             test1.yaml
             test2.yaml
           expressions: |
-            '.foo.bar = "modified"'
-            '.nested.key = "new-global-value"'
+            .foo.bar = "modified"
+            .nested.key = "new-global-value"
       - name: Verify global patch on test1.yaml
         run: |
           result1=$(yq eval '.foo.bar' test1.yaml)
