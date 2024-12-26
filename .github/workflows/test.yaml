@@ -34,12 +34,8 @@ jobs:
       - name: Test global expression patch on multiple files
         uses: ./
         with:
-          files: |
-            test1.yaml
-            test2.yaml
-          expressions: |
-            .foo.bar = "modified"
-            .nested.key = "new-global-value"
+          files: test1.yaml,test2.yaml
+          expressions: .foo.bar = "modified",.nested.key = "new-global-value"
       - name: Verify global patch on test1.yaml
         run: |
           result1=$(yq eval '.foo.bar' test1.yaml)
@@ -59,9 +55,7 @@ jobs:
       - name: Test file-specific expression patch on multiple files
         uses: ./
         with:
-          file-expressions: |
-            test1.yaml:.nested.key = "new-value"
-            test2.yaml:.nested.key = "another-value"
+          file-expressions: test1.yaml:.nested.key = "new-value",test2.yaml:.nested.key = "another-value"
       - name: Verify file-specific patch on test1.yaml
         run: |
           result=$(yq eval '.nested.key' test1.yaml)
