@@ -34,9 +34,9 @@ runs:
       id: entrypoint
       run: |
         # normalize the inputs to a comma-separated list
-        files=$(echo '${{ inputs.files }}' | tr '\n' ',' | sed '/^$/! s/,$//')
-        expressions=$(echo '${{ inputs.expressions }}' | tr '\n' ',' | sed '/^$/! s/,$//')
-        file_expressions=$(echo '${{ inputs.file-expressions }}' | tr '\n' ',' | sed '/^$/! s/,$//')
+        files=$(echo '${{ inputs.files }}' | tr '\n' ',' | awk 'length>0 {print substr($0, 1, length($0)-1)}')
+        expressions=$(echo '${{ inputs.expressions }}' | tr '\n' ',' | awk 'length>0 {print substr($0, 1, length($0)-1)}')
+        file_expressions=$(echo '${{ inputs.file-expressions }}' | tr '\n' ',' | awk 'length>0 {print substr($0, 1, length($0)-1)}')
 
         # run the entrypoint script
         chmod +x $GITHUB_ACTION_PATH/entrypoint.sh
