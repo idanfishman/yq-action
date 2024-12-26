@@ -26,7 +26,6 @@ inputs:
         file-expressions: |
           file1.yaml:.key = "value"
           file2.yaml:.nested.key = "value"
-      If provided, these expressions override global expressions for the specified files.
     required: false
 runs:
   using: "composite"
@@ -35,9 +34,9 @@ runs:
       id: entrypoint
       run: |
         # normalize the inputs to a comma-separated list
-        files=$(echo '${{ inputs.files }}' | tr '\n' ',' | sed 's/,$//')
-        expressions=$(echo '${{ inputs.expressions }}' | tr '\n' ',' | sed 's/,$//')
-        file_expressions=$(echo '${{ inputs.file-expressions }}' | tr '\n' ',' | sed 's/,$//')
+        files=$(echo "${{ inputs.files }}" | awk '{printf "%s,",$0} END {printf "\n"}' | sed 's/,$//')
+        expressions=$(echo "${{ inputs.expressions }}" | awk '{printf "%s,",$0} END {printf "\n"}' | sed 's/,$//')
+        file_expressions=$(echo "${{ inputs.file-expressions }}" | awk '{printf "%s,",$0} END {printf "\n"}' | sed 's/,$//')
 
         # debug
         echo "files: $files"
