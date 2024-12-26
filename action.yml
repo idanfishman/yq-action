@@ -1,0 +1,36 @@
+name: "yq-action"
+description: "A GitHub Action to parse or patch YAML or JSON files using yq"
+inputs:
+  files:
+    description: >
+      A comma-separated list of file paths to process.
+      Example:
+        files: file1.yaml,file2.yaml
+      This input is required if 'expressions' or 'file-expressions' are provided.
+    required: false
+  expressions:
+    description: >
+      A comma-separated list of yq expressions to apply globally to all specified files.
+      Example:
+        expressions: .key = "value",.nested.key = "value"
+    required: false
+  file-expressions:
+    description: >
+      A comma-separated list of expressions to apply to specific files.
+      Format each line as '<file>:<expression>'.
+      Example:
+        file-expressions: file1.yaml:.key = "value",file2.yaml:.nested.key = "value"
+    required: false
+runs:
+  using: "composite"
+  steps:
+    - name: Run entrypoint.sh
+      id: entrypoint
+      run: |
+        # run the entrypoint script
+        chmod +x $GITHUB_ACTION_PATH/entrypoint.sh
+        $GITHUB_ACTION_PATH/entrypoint.sh \
+          --files '${{ inputs.files }}' \
+          --expressions '${{ inputs.expressions }}' \
+          --file-expressions '${{ inputs.file-expressions }}'
+      shell: bash

@@ -1,0 +1,91 @@
+name: Run e2e tests
+
+on:
+  pull_request:
+    paths:
+      - "action.yml"
+      - "entrypoint.sh"
+    types:
+      - opened
+      - synchronize
+      - reopened
+
+jobs:
+  test-patch-mode:
+    runs-on: ubuntu-24.04
+    name: Test patch mode
+    steps:
+      - uses: actions/checkout@v4
+      - name: Create test YAML files
+        run: |
+          cat > test1.yaml << 'EOF'
+          foo:
+            bar: original
+          nested:
+            key: value
+          EOF
+
+          cat > test2.yaml << 'EOF'
+          foo:
+            bar: original
+          nested:
+            key: value
+          EOF
+      - name: Test global expression patch on multiple files
+        uses: ./
+        with:
+          files: test1.yaml,test2.yaml
+          expressions: .foo.bar = "modified",.nested.key = "new-global-value"
+      - name: Verify global patch on test1.yaml
+        run: |
+          result1=$(yq eval '.foo.bar' test1.yaml)
+          result2=$(yq eval '.nested.key' test1.yaml)
+          if [ "$result1" != "modified" ] || [ "$result2" != "new-global-value" ]; then
+            echo "global patch failed on test1.yaml"
+            exit 1
+          fi
+      - name: Verify global patch on test2.yaml
+        run: |
+          result1=$(yq eval '.foo.bar' test2.yaml)
+          result2=$(yq eval '.nested.key' test2.yaml)
+          if [ "$result1" != "modified" ] || [ "$result2" != "new-global-value" ]; then
+            echo "global patch failed on test2.yaml"
+            exit 1
+          fi
+      - name: Test file-specific expression patch on multiple files
+        uses: ./
+        with:
+          file-expressions: test1.yaml:.nested.key = "new-value",test2.yaml:.nested.key = "another-value"
+      - name: Verify file-specific patch on test1.yaml
+        run: |
+          result=$(yq eval '.nested.key' test1.yaml)
+          if [ "$result" != "new-value" ]; then
+            echo "file-specific patch failed on test1.yaml"
+            exit 1
+          fi
+      - name: Verify file-specific patch on test2.yaml
+        run: |
+          result=$(yq eval '.nested.key' test2.yaml)
+          if [ "$result" != "another-value" ]; then
+            echo "file-specific patch failed on test2.yaml"
+            exit 1
+          fi
+
+  test-error-cases:
+    runs-on: ubuntu-24.04
+    name: Test error handling
+    steps:
+      - uses: actions/checkout@v4
+      - name: Test non-existent file
+        id: missing-file
+        uses: ./
+        continue-on-error: true
+        with:
+          files: nonexistent.yaml
+          expressions: .key = "value"
+      - name: Verify missing file error
+        run: |
+          if [ "${{ steps.missing-file.outcome }}" != "failure" ]; then
+            echo "missing file test should have failed"
+            exit 1
+          fi
