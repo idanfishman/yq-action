@@ -35,9 +35,9 @@ runs:
       id: entrypoint
       run: |
         # normalize the inputs to a comma-separated list
-        files=$(echo '${{ inputs.files }}' | tr '\n' ',' | sed "s/,$//")
-        expressions=$(echo '${{ inputs.expressions }}' | tr '\n' ',' | sed "s/,$//")
-        file_expressions=$(echo '${{ inputs.file-expressions }}' | tr '\n' ',' | sed "s/,$//")
+        files=$(echo '${{ inputs.files }}' | awk 'BEGIN{ORS=","} {print}' | sed 's/,$//')
+        expressions=$(echo '${{ inputs.expressions }}' | awk 'BEGIN{ORS=","} {print}' | sed 's/,$//')
+        file_expressions=$(echo '${{ inputs.file-expressions }}' | awk 'BEGIN{ORS=","} {print}' | sed 's/,$//')
 
         # debug
         echo "files: $files"
