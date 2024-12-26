@@ -1,54 +1,33 @@
 name: "yq-action"
-description: "A GitHub Action to parse or patch YAML/JSON/XML/CSV files using yq"
+description: "A GitHub Action to parse or patch YAML or JSON files using yq"
 inputs:
-  mode:
-    description: >
-      Specifies the operation mode for the action:
-      - 'patch': Modify the specified files in-place using yq expressions.
-      - 'query': Extract values from the specified files based on yq expressions.
-      This input is required.
-    required: true
-    default: "patch"
   files:
     description: >
-      Comma-separated list of file paths to process (e.g., 'file1.yaml,file2.json').
-      Supported formats: YAML, JSON, XML, and CSV.
+      A line-separated list of file paths to process.
+      Example:
+        files: |
+          file1.yaml
+          file2.yaml
       This input is required if 'expressions' or 'file-expressions' are provided.
     required: false
   expressions:
     description: >
-      Comma-separated yq expressions to apply globally to all specified files.
+      A line-separated list of yq expressions to apply globally to all specified files.
       Example:
-        - `.key=value` sets the key to 'value' in all files.
-        - `.nested.key=value` modifies nested keys in all files.
-      If 'file-expressions' are provided, this input will be ignored.
+        expressions: |
+          .key = "value"
+          .nested.key = "value"
     required: false
   file-expressions:
     description: >
-      Comma-separated list of expressions to apply to specific files.
-      Format:
-        - '<file>:<expression>'
+      A line-separated list of expressions to apply to specific files.
+      Format each line as '<file>:<expression>'.
       Example:
-        - `file1.yaml:.key=value` sets the key in 'file1.yaml'.
-        - `file2.yaml:.nested.key=value` modifies the nested key in 'file2.yaml'.
+        file-expressions: |
+          file1.yaml:.key = "value"
+          file2.yaml:.nested.key = "value"
       If provided, these expressions override global expressions for the specified files.
     required: false
-outputs:
-  query-output:
-    description: >
-      The result of the query operation in JSON format. 
-      The output includes:
-        - File names as keys.
-        - A nested object for each file with expressions as keys and their results as values.
-      Example:
-        ```
-        {
-          "file1.yaml": { ".key": "value1", ".nested.key": "value2" },
-          "file2.yaml": { ".key": "value3" }
-        }
-        ```
-      This output is only available in 'query' mode.
-    value: ${{ steps.entrypoint.outputs.query-output }}
 runs:
   using: "composite"
   steps:
@@ -57,7 +36,6 @@ runs:
       run: |
         chmod +x $GITHUB_ACTION_PATH/entrypoint.sh
         $GITHUB_ACTION_PATH/entrypoint.sh \
-          --mode "${{ inputs.mode }}" \
           --files "${{ inputs.files }}" \
           --expressions "${{ inputs.expressions }}" \
           --file-expressions "${{ inputs.file-expressions }}"

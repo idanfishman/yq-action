@@ -2,18 +2,18 @@
 
 set -e
 
-# Logging Functions
-
-# Logs an error message in GitHub Actions format.
+# Logs an error message in GitHub Actions format, and exits the script with
+# a non-zero status code.
 # @param {string} message - The error message to log.
-log_error() {
+log_fatal() {
   local message="$1"
   echo "::error::$message"
+  exit 1
 }
 
 # Logs a notice message in GitHub Actions format.
 # @param {string} message - The notice message to log.
-log_notice() {
+log_info() {
   local message="$1"
   echo "::notice::$message"
 }
@@ -25,161 +25,160 @@ log_debug() {
   echo "::debug::$message"
 }
 
-# Schema Validation
-
-# Validates the inputs against the expected schema.
-# Ensures the required inputs are provided and formatted correctly.
-# Logs errors and exits if validation fails.
-validate_schema() {
-  log_debug "validating input schema..."
-
-  if [ -z "$MODE" ]; then
-    log_error "'mode' input is required."
-    exit 1
+# Checks if yq is installed and is version 4.
+check_yq_version() {
+  if ! command -v yq &> /dev/null; then
+    log_fatal "yq is not installed. please install yq version >4."
   fi
 
-  if [[ "$MODE" != "patch" && "$MODE" != "query" ]]; then
-    log_error "'mode' must be either 'patch' or 'query'."
-    exit 1
+  local version
+  version=$(yq --version | awk '{print $3}')
+  if [[ $(echo -e "$version\n4" | sort -V | head -n1) != "4" ]]; then
+    log_fatal "yq version must be greater than 4. found version: $version"
   fi
 
-  if [ -z "$FILES" ] && [ -z "$FILE_EXPRESSIONS" ]; then
-    log_error "at least one of 'files' or 'file-expressions' must be provided."
-    exit 1
-  fi
-
-  log_debug "schema validation passed."
+  log_info "yq version $version is valid."
 }
 
-# File Validation
+# Normalize input into an array by splitting on newlines or commas.
+# @param {string} input - The input string to normalize.
+# @param {string} output_array_name - The name of the output array.
+normalize_input() {
+    local input="$1"
+    local output_array_name="$2"
+    local IFS=$'\n'
 
-# Validates the provided files to ensure they exist and are readable.
-# Logs errors and exits if any file is invalid.
-validate_files() {
-  log_debug "validating files..."
+    local normalized_input
+    normalized_input=$(echo "$input" | tr '\n' ',')
 
-  if [ -n "$FILES" ]; then
-    for FILE in "${FILE_LIST[@]}"; do
-      if [ ! -f "$FILE" ]; then
-        log_error "file '$FILE' does not exist or is not a valid file."
-        exit 1
-      fi
-      log_debug "file '$FILE' is valid."
+    IFS=',' read -r -a output_array <<< "$normalized_input"
+
+    eval "$output_array_name=(\"\${output_array[@]}\")"
+}
+
+# Validates the inputs passed to the action.
+# files and expressions must be specified together, or file_expressions must be specified.
+# files must exist.
+# @param {string} files - The files to patch/query exists.
+# @param {string} expressions - The yq expressions to patch/query.
+# @param {string} file_expressions - The file expressions to patch/query.
+validate_inputs() {
+  local -r -a files=("${!1}")
+  local -r -a expressions=("${!2}")
+  local -r -a file_expressions=("${!3}")
+
+  if [[ -z "$file_expressions" && (-z "$files" || -z "$expressions") ]]; then
+    log_fatal "either 'files' and 'expressions' must be specified together, or 'file-expressions' must be specified."
+  fi
+
+  local all_files=("${files[@]}")
+  if [[ -n "$file_expressions" ]]; then
+    for fe in "${file_expressions[@]}"; do
+      local file="${fe%%:*}"
+      all_files+=("$file")
     done
   fi
 
-  log_debug "file validation passed."
+  for file in "${all_files[@]}"; do
+    if [[ ! -f "$file" ]]; then
+      log_fatal "file does not exist: $file"
+    fi
+  done
+
+  log_info "inputs validated successfully."
 }
 
-# Process a Single File
-
-# Processes a single file with the given expressions and mode.
-# For 'query' mode, retrieves values based on the expressions.
-# For 'patch' mode, modifies the file in place based on the expressions.
+# Processes a single file with the given expressions.
 # @param {string} file - The file to process.
-# @param {string} expressions - The expressions to apply.
-# @param {string} mode - The mode to use (either "patch" or "query").
-# @returns {string} The result of processing the file in JSON format.
+# @param {array} expressions - Comma-separated yq expressions to patch the file with.
 process_file() {
   local file="$1"
-  local expressions="$2"
-  local mode="$3"
-  local file_result="{}"
+  local expressions_string="$2"
+  local IFS=','
 
-  IFS=',' read -ra EXP_LIST <<< "$expressions"
-  for EXP in "${EXP_LIST[@]}"; do
-    if [ "$mode" = "query" ]; then
-      log_debug "querying file '$file' with expression '$EXP'."
-      RESULT=$(yq eval "$EXP" "$file" 2>&1) || {
-        log_error "failed to query expression '$EXP' in file '$file': $RESULT"
-        exit 1
-      }
-      file_result=$(echo "$file_result" | yq eval ".\"$EXP\" = \"$RESULT\"" -)
-    else
-      log_debug "patching file '$file' with expression '$EXP'."
-      yq eval "$EXP" -i "$file" 2>&1 || {
-        log_error "failed to apply expression '$EXP' to file '$file'"
-        exit 1
-      }
-    fi
-  done
+  # Split the expressions string into an array
+  read -r -a expr_array <<< "$expressions_string"
 
-  echo "$file_result"
-}
-
-# Process Files and Generate Output
-
-# Processes the provided files and generates output.
-# Iterates over each file and applies the appropriate expressions based on the mode.
-# @returns {string} The result of processing the files in JSON format.
-process_files() {
-  log_debug "processing files..."
-  RESULT_JSON="{}"
-
-  # Process each file
-  for FILE in "${FILE_LIST[@]}"; do
-    expressions="$EXPRESSIONS"
-
-    # Check for file-specific expressions
-    for FILE_EXP in "${FILE_EXP_LIST[@]}"; do
-      FILE_NAME=$(echo "$FILE_EXP" | cut -d':' -f1)
-      if [ "$FILE_NAME" = "$FILE" ]; then
-        expressions=$(echo "$FILE_EXP" | cut -d':' -f2)
-        break
-      fi
-    done
-
-    # Skip if no expressions are found
-    if [ -z "$expressions" ]; then
-      log_notice "no expressions found for file '$FILE'. skipping."
-      continue
-    fi
-
-    log_notice "processing file '$FILE' with expressions: $expressions"
-    FILE_RESULT=$(process_file "$FILE" "$expressions" "$MODE")
-    if [ "$MODE" = "query" ]; then
-      RESULT_JSON=$(echo "$RESULT_JSON" | yq eval ".\"$FILE\" = $FILE_RESULT" -)
-    fi
-  done
-
-  echo "$RESULT_JSON"
-}
-
-# Main Execution
-
-# Main function to execute the script.
-# Parses inputs, validates them, processes files, and outputs results.
-main() {
-  # Parse inputs
-  while [ "$#" -gt 0 ]; do
-    case "$1" in
-      --mode) MODE="$2"; shift 2;;
-      --files) FILES="$2"; shift 2;;
-      --expressions) EXPRESSIONS="$2"; shift 2;;
-      --file-expressions) FILE_EXPRESSIONS="$2"; shift 2;;
-      *) log_error "unknown parameter passed: $1"; exit 1;;
-    esac
-  done
-
-  # Initialize arrays
-  IFS=',' read -ra FILE_LIST <<< "$FILES"
-  IFS=',' read -ra GLOBAL_EXP_LIST <<< "$EXPRESSIONS"
-  IFS=',' read -ra FILE_EXP_LIST <<< "$FILE_EXPRESSIONS"
-
-  # Validate inputs
-  validate_schema
-  validate_files
-
-  # Process files
-  RESULT=$(process_files)
-
-  # Output results
-  if [ "$MODE" = "query" ]; then
-    echo "query-output=$RESULT" >> $GITHUB_OUTPUT
-  else
-    log_notice "patch mode completed. returning empty output."
-    echo "query-output={}" >> $GITHUB_OUTPUT
+  # Validate the YAML file syntax
+  if ! yq eval '.' "$file" > /dev/null 2>&1; then
+    log_fatal "invalid syntax in file: $file"
   fi
+
+  for expression in "${expr_array[@]}"; do
+    log_info "processing file: $file with expression: $expression"
+    if ! yq -e "$expression" -i "$file"; then
+      log_fatal "failed to process file: $file with expression: $expression"
+    fi
+  done
+}
+
+# Processes all files with the given expressions.
+# It aggregates the expressions to process the files with.
+# @param {string} files - The files to process.
+# @param {string} expressions - The yq expressions to process the files with.
+# @param {string} file_expressions - The file expressions to process the files with.
+process_files() {
+  local -r -a files=("${!1}")
+  local -r -a expressions=("${!2}")
+  local -r -a file_expressions=("${!3}")
+
+  # Declare an associative array to map files to their expressions as arrays
+  declare -A file_to_expressions
+
+  # Add global expressions to all files
+  for file in "${files[@]}"; do
+    file_to_expressions["$file"]="${expressions[*]}"
+  done
+
+  # Add file-specific expressions
+  for fe in "${file_expressions[@]}"; do
+    local file="${fe%%:*}"
+    local expression="${fe#*:}"
+    if [[ -n "${file_to_expressions[$file]}" ]]; then
+      file_to_expressions["$file"]+=",${expression}"
+    else
+      file_to_expressions["$file"]="$expression"
+    fi
+  done
+
+  for file in "${!file_to_expressions[@]}"; do
+    IFS=',' read -r -a expressions_array <<< "${file_to_expressions[$file]}"
+    process_file "$file" "${expressions_array[@]}"
+  done
+}
+
+main(){
+  check_yq_version
+
+  files=()
+  expressions=()
+  file_expressions=()
+  all_files=()
+
+  while [[ "$#" -gt 0 ]]; do
+      case $1 in
+          --files)
+              normalize_input "$2" files
+              shift 2
+              ;;
+          --expressions)
+              normalize_input "$2" expressions
+              shift 2
+              ;;
+          --file-expressions)
+              normalize_input "$2" file_expressions
+              shift 2
+              ;;
+          *) log_fatal "unknown parameter passed: $1" ;;
+      esac
+  done
+
+  log_debug "files: ${files[*]}"
+  log_debug "expressions: ${expressions[*]}"
+  log_debug "file_expressions: ${file_expressions[*]}"
+
+  validate_inputs files[@] expressions[@] file_expressions[@]
+  process_files files[@] expressions[@] file_expressions[@]
 }
 
 main "$@"
